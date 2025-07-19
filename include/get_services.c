@@ -22,45 +22,53 @@ char **get_systemd_services(size_t *count) {
     goto cleanup;
 
   DBusMessageIter iter, array_iter;
-  if (!dbus_message_iter_init(reply, &iter))
-    goto success;
+  dbus_message_iter_init(reply, &iter);
   if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY)
-    goto success;
-
+    goto cleanup;
   dbus_message_iter_recurse(&iter, &array_iter);
+
+  size_t count_services = 0;
   while (dbus_message_iter_get_arg_type(&array_iter) == DBUS_TYPE_STRUCT) {
     DBusMessageIter struct_iter;
     const char *unit_name;
     dbus_message_iter_recurse(&array_iter, &struct_iter);
     dbus_message_iter_get_basic(&struct_iter, &unit_name);
-    size_t len = strlen(unit_name);
-    if (len > 8 && !strcmp(unit_name + len - 8, ".service"))
-      (*count)++;
+    if (strlen(unit_name) > 8 &&
+        !strcmp(unit_name + strlen(unit_name) - 8, ".service"))
+      count_services++;
     dbus_message_iter_next(&array_iter);
   }
 
-  if (!*count)
-    goto success;
-  if (!(services = malloc(*count * sizeof(char *))))
+  *count = count_services;
+  if (!count_services) {
+    services = NULL;
+    goto cleanup;
+  }
+
+  if (!(services = malloc(count_services * sizeof(char *))))
     goto cleanup;
 
-  dbus_message_iter_init(reply, &iter);
-  dbus_message_iter_recurse(&iter, &array_iter);
   size_t idx = 0;
+  dbus_message_iter_init(reply, &iter);
+  if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY)
+    goto cleanup;
+
+  dbus_message_iter_recurse(&iter, &array_iter);
   while (dbus_message_iter_get_arg_type(&array_iter) == DBUS_TYPE_STRUCT) {
     DBusMessageIter struct_iter;
     const char *unit_name;
     dbus_message_iter_recurse(&array_iter, &struct_iter);
     dbus_message_iter_get_basic(&struct_iter, &unit_name);
-    size_t len = strlen(unit_name);
-    if (len > 8 && !strcmp(unit_name + len - 8, ".service")) {
+    if (strlen(unit_name) > 8 &&
+        !strcmp(unit_name + strlen(unit_name) - 8, ".service")) {
       if (!(services[idx] = strdup(unit_name)))
         goto strdup_fail;
       idx++;
     }
     dbus_message_iter_next(&array_iter);
   }
-  goto success;
+
+  return services;
 
 strdup_fail:
   while (idx)
@@ -76,13 +84,6 @@ cleanup:
     dbus_message_unref(msg);
   if (conn)
     dbus_connection_unref(conn);
-  dbus_error_free(&err);
-  return services;
-
-success:
-  dbus_message_unref(reply);
-  dbus_message_unref(msg);
-  dbus_connection_unref(conn);
   dbus_error_free(&err);
   return services;
 }
