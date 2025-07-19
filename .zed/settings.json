@@ -1,0 +1,13 @@
+{
+  "lsp": {
+    "clangd": {
+      "binary": {
+        "arguments": [
+          "$(pkg-config --cflags gtk4)",
+          "$(pkg-config --libs gtk4)",
+          "-xc"
+        ]
+      }
+    }
+  }
+}
