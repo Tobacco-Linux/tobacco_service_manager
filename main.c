@@ -40,7 +40,7 @@ static gboolean populate_store(gpointer data) {
 static void activate(GtkApplication *app, gpointer user_data) {
   (void)user_data;
   GtkWidget *window = gtk_application_window_new(app);
-  gtk_window_set_title(GTK_WINDOW(window), "Systemd Services");
+  gtk_window_set_title(GTK_WINDOW(window), "Service Managera");
   gtk_window_set_default_size(GTK_WINDOW(window), 400, 600);
 
   AppData *data = g_new0(AppData, 1);
@@ -66,7 +66,8 @@ int main(int argc, char **argv) {
   GtkApplication *app;
   int status;
 
-  app = gtk_application_new("org.gtk.example", G_APPLICATION_DEFAULT_FLAGS);
+  app = gtk_application_new("org.TobaccoLinux.service_manager",
+                            G_APPLICATION_DEFAULT_FLAGS);
   g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
   status = g_application_run(G_APPLICATION(app), argc, argv);
   g_object_unref(app);
