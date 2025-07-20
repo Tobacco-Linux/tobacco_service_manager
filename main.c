@@ -11,14 +11,17 @@ static gboolean populate_store(gpointer data) {
   size_t count;
   char **services = get_systemd_services(&count);
 
-  if (!services)
+  if (!services) {
+    g_printerr("Failed to retrieve services");
     return G_SOURCE_REMOVE;
+  }
 
   for (size_t i = 0; i < count; i++) {
     g_list_store_append(app->store, gtk_string_object_new(services[i]));
     free(services[i]);
   }
   free(services);
+
   return G_SOURCE_REMOVE;
 }
 
@@ -61,6 +64,7 @@ int main(int argc, char **argv) {
   app = gtk_application_new("org.TobaccoLinux.service_manager",
                             G_APPLICATION_DEFAULT_FLAGS);
   g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
+
   status = g_application_run(G_APPLICATION(app), argc, argv);
   g_object_unref(app);
 
