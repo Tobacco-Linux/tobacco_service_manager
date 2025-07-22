@@ -1,4 +1,4 @@
-use adw::{Application, ToolbarView, Window};
+use adw::{Application, Window};
 use gtk4::{
     Label, ListBox, Orientation, Paned, PolicyType, ScrolledWindow, SearchEntry, Widget, glib,
     prelude::*,
