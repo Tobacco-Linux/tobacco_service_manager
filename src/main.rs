@@ -1,92 +1,91 @@
 use adw::{Application, HeaderBar, Window, prelude::*};
 use gtk4::{
-    Align, Box, Label, ListBox, Orientation, Paned, PolicyType, ScrolledWindow, SearchEntry,
-    Widget, glib,
+    Align, Box, Label, ListBox, ListBoxRow, Orientation, ScrolledWindow, SearchEntry,
+    SelectionMode, glib,
 };
 
-const GLOBAL_MARGIN: i32 = 0;
-const APP_ID: &str = "org.tobacco_linux.ServiceManager";
+mod backend;
+use backend::get_services;
 
 fn main() -> glib::ExitCode {
-    let app = Application::builder().application_id(APP_ID).build();
+    let app = Application::builder()
+        .application_id("org.tobacco_linux.ServiceManager")
+        .build();
 
     app.connect_activate(build_ui);
-
     app.run()
 }
 
-fn build_ui(app: &adw::Application) {
-    let scrolled_sidebar = wrap_in_scroller(&sidebar());
-    scrolled_sidebar.set_size_request(250, -1);
-
-    let scrolled_services = wrap_in_scroller(&service_list());
-    scrolled_services.set_size_request(550, -1);
-
-    let paned = Paned::builder()
-        .orientation(Orientation::Horizontal)
-        .halign(Align::Fill)
-        .valign(Align::Fill)
-        .vexpand(true)
-        .hexpand(true)
+fn build_ui(app: &Application) {
+    let search_entry = SearchEntry::builder()
+        .css_classes(["inline"])
+        .placeholder_text("Search...")
         .build();
-    paned.set_start_child(Some(&scrolled_sidebar));
-    paned.set_end_child(Some(&scrolled_services));
 
-    main_window(&app, &headerify(&paned)).present();
-}
+    let sidebar = ListBox::builder()
+        .css_classes(["navigation-sidebar"])
+        .selection_mode(SelectionMode::None)
+        .build();
+    sidebar.append(&search_entry);
 
-fn main_window(app: &Application, content: &impl IsA<Widget>) -> Window {
-    Window::builder()
+    let services = ListBox::builder()
+        .selection_mode(SelectionMode::None)
+        .css_classes(["boxed-list"])
+        .margin_top(4)
+        .margin_bottom(4)
+        .build();
+
+    if let Ok(service_list) = get_services() {
+        for service in service_list {
+            services.append(
+                &ListBoxRow::builder()
+                    .child(
+                        &Label::builder()
+                            .label(&service)
+                            .halign(Align::Start)
+                            .margin_start(8)
+                            .margin_top(6)
+                            .margin_bottom(6)
+                            .build(),
+                    )
+                    .build(),
+            );
+        }
+    }
+
+    let main_box = Box::builder()
+        .orientation(Orientation::Horizontal)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+
+    let scrolled_sidebar = ScrolledWindow::builder()
+        .min_content_width(250)
+        .child(&sidebar)
+        .vexpand(true)
+        .build();
+
+    let scrolled_services = ScrolledWindow::builder()
+        .min_content_width(550)
+        .child(&services)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+
+    main_box.append(&scrolled_sidebar);
+    main_box.append(&scrolled_services);
+
+    let vbox = Box::new(Orientation::Vertical, 0);
+    vbox.append(&HeaderBar::new());
+    vbox.append(&main_box);
+
+    let window = Window::builder()
         .application(app)
         .default_width(800)
         .default_height(600)
         .title("Service Manager")
-        .content(content)
-        .build()
-}
-
-fn headerify(content: &impl IsA<Widget>) -> Box {
-    let box_widget = Box::new(Orientation::Vertical, 0);
-    box_widget.append(&HeaderBar::new());
-    box_widget.append(content);
-    box_widget
-}
-
-fn sidebar() -> ListBox {
-    let search_bar = SearchEntry::builder()
-        .css_classes(vec![String::from("inline")])
-        .placeholder_text("Search...")
-        .width_request(50)
+        .content(&vbox)
         .build();
 
-    let list_box = ListBox::builder()
-        .margin_start(GLOBAL_MARGIN)
-        .margin_end(GLOBAL_MARGIN)
-        .margin_bottom(GLOBAL_MARGIN)
-        .margin_top(GLOBAL_MARGIN)
-        .css_classes(vec![String::from("navigation-sidebar")])
-        .build();
-
-    list_box.append(&search_bar);
-
-    list_box
-}
-
-fn service_list() -> ListBox {
-    let list_box = ListBox::builder().build();
-    for number in 0..=100 {
-        let label = Label::new(Some(&number.to_string()));
-        label.set_size_request(-1, 30);
-        list_box.append(&label);
-    }
-
-    list_box
-}
-
-fn wrap_in_scroller(child: &impl IsA<Widget>) -> ScrolledWindow {
-    ScrolledWindow::builder()
-        .hscrollbar_policy(PolicyType::Never)
-        .min_content_width(360)
-        .child(child)
-        .build()
+    window.present();
 }
