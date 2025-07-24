@@ -1,7 +1,7 @@
 use super::views::{create_service_entry, filter_services};
 use crate::backend::get_services;
 use adw::{Application, HeaderBar, Window, prelude::*};
-use gtk4::{Box, ListBox, Orientation, ScrolledWindow, SearchEntry, SelectionMode};
+use gtk4::{Box, ListBox, Orientation, ScrolledWindow, SearchEntry, SelectionMode, Separator};
 
 pub fn build_ui(app: &Application) {
     let search_entry = SearchEntry::builder()
@@ -62,6 +62,7 @@ pub fn build_ui(app: &Application) {
             .vexpand(true)
             .build(),
     );
+    main_box.append(&Separator::new(Orientation::Vertical));
 
     main_box.append(
         &ScrolledWindow::builder()
