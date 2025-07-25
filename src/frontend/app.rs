@@ -100,24 +100,44 @@ pub fn build_ui(app: &Application) {
         .vexpand(true)
         .build();
 
-    main_box.append(
-        &ScrolledWindow::builder()
-            .min_content_width(250)
-            .child(&sidebar)
-            .vexpand(true)
-            .build(),
-    );
-    main_box.append(&Separator::new(Orientation::Vertical));
+    let sidebar_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .width_request(350)
+        .build();
 
-    main_box.append(
-        &ScrolledWindow::builder()
-            .hscrollbar_policy(gtk4::PolicyType::Never)
-            .min_content_width(550)
-            .child(&services_list)
-            .hexpand(true)
-            .vexpand(true)
-            .build(),
-    );
+    let sidebar_scroll = ScrolledWindow::builder()
+        .min_content_width(250)
+        .child(&sidebar)
+        .vexpand(true)
+        .hexpand(false)
+        .build();
+
+    sidebar_container.append(&sidebar_scroll);
+
+    let services_container = Box::builder()
+        .orientation(Orientation::Vertical)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+
+    let services_scroll = ScrolledWindow::builder()
+        .hscrollbar_policy(gtk4::PolicyType::Never)
+        .min_content_width(550)
+        .child(&services_list)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+
+    services_container.append(&services_scroll);
+
+    main_box.append(&sidebar_container);
+    main_box.append(&Separator::new(Orientation::Vertical));
+    main_box.append(&services_container);
+
+    sidebar_container.set_hexpand(false);
+    sidebar_container.set_vexpand(true);
+    services_container.set_hexpand(true);
+    services_container.set_vexpand(true);
 
     let vbox = Box::new(Orientation::Vertical, 0);
     vbox.append(&HeaderBar::new());
