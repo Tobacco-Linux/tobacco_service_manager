@@ -1,12 +1,10 @@
 use super::views::{
-    create_filter_controls, create_service_entry, filter_services, search_services,
-    service_entry::ServiceRowData,
+    ServiceData, create_filter_controls, create_service_entry, update_service_visibility,
 };
 use crate::backend::get_services;
 use adw::{Application, HeaderBar, Window, prelude::*};
 use gtk4::{Box, ListBox, ListBoxRow, Orientation, ScrolledWindow, SearchEntry, Separator};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 pub fn build_ui(app: &Application) {
@@ -38,64 +36,62 @@ pub fn build_ui(app: &Application) {
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
-        .hexpand(false)
         .build();
 
-    let service_widgets = std::cell::RefCell::new(Vec::new());
-    let row_metadata: Rc<RefCell<HashMap<usize, ServiceRowData>>> =
-        Rc::new(RefCell::new(HashMap::new()));
+    let current_query = Rc::new(RefCell::new(String::new()));
+    let service_widgets: Rc<RefCell<Vec<(ServiceData, ListBoxRow)>>> =
+        Rc::new(RefCell::new(Vec::new()));
 
     if let Ok(services) = get_services() {
-        let widgets: Vec<ListBoxRow> = services
+        let widgets: Vec<(ServiceData, ListBoxRow)> = services
             .into_iter()
-            .enumerate()
-            .map(|(index, service)| create_service_entry(&service, &row_metadata, index))
+            .map(|service| create_service_entry(&service))
             .collect();
 
-        for widget in &widgets {
-            services_list.append(widget);
+        for (_, row) in &widgets {
+            services_list.append(row);
         }
 
         *service_widgets.borrow_mut() = widgets;
     }
 
-    let service_widgets_search = service_widgets.clone();
-    let row_metadata_search = row_metadata.clone();
+    let update_visibility = {
+        let service_widgets = service_widgets.clone();
+        let status_combo = status_combo.clone();
+        let enablement_combo = enablement_combo.clone();
+        let current_query = current_query.clone();
+
+        move || {
+            let query = current_query.borrow().clone();
+            let status_filter = status_combo.active_text().unwrap_or_else(|| "All".into());
+            let enablement_filter = enablement_combo
+                .active_text()
+                .unwrap_or_else(|| "All".into());
+
+            update_service_visibility(
+                &service_widgets.borrow(),
+                &query,
+                &status_filter,
+                &enablement_filter,
+            );
+        }
+    };
+
+    let update_visibility_search = update_visibility.clone();
+    let current_query_search = current_query.clone();
     search_entry.connect_search_changed(move |search| {
-        let query = search.text().to_string();
-        search_services(&service_widgets_search, &row_metadata_search, &query);
+        *current_query_search.borrow_mut() = search.text().to_string();
+        update_visibility_search();
     });
 
-    let service_widgets_status = service_widgets.clone();
-    let row_metadata_status = row_metadata.clone();
-    let enablement_combo_filter = enablement_combo.clone();
-    status_combo.connect_changed(move |combo| {
-        if let Some(status_text) = combo.active_text() {
-            if let Some(enablement_text) = enablement_combo_filter.active_text() {
-                filter_services(
-                    &service_widgets_status,
-                    &row_metadata_status,
-                    &status_text,
-                    &enablement_text,
-                );
-            }
-        }
+    let update_visibility_status = update_visibility.clone();
+    status_combo.connect_changed(move |_| {
+        update_visibility_status();
     });
 
-    let service_widgets_enablement = service_widgets.clone();
-    let row_metadata_enablement = row_metadata.clone();
-    let status_combo_filter = status_combo.clone();
-    enablement_combo.connect_changed(move |combo| {
-        if let Some(enablement_text) = combo.active_text() {
-            if let Some(status_text) = status_combo_filter.active_text() {
-                filter_services(
-                    &service_widgets_enablement,
-                    &row_metadata_enablement,
-                    &status_text,
-                    &enablement_text,
-                );
-            }
-        }
+    let update_visibility_enablement = update_visibility.clone();
+    enablement_combo.connect_changed(move |_| {
+        update_visibility_enablement();
     });
 
     let main_box = Box::builder()

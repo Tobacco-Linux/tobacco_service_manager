@@ -1,65 +1,62 @@
-use adw::glib::object::ObjectExt;
+use super::service_entry::ServiceData;
 use gtk4::{ListBoxRow, prelude::WidgetExt};
-use std::cell::RefCell;
 
-use crate::frontend::views::service_entry::{RowMetadata, format_enablement, format_status};
-
-pub fn search_services(
-    service_widgets: &RefCell<Vec<ListBoxRow>>,
-    metadata: &RowMetadata,
+pub fn update_service_visibility(
+    service_widgets: &[(ServiceData, ListBoxRow)],
     query: &str,
-) {
-    let widgets = service_widgets.borrow();
-    let metadata_ref = metadata.borrow();
-
-    for row in widgets.iter() {
-        let index = unsafe {
-            row.data::<usize>("row_index")
-                .expect("Row should have index")
-                .read()
-        };
-
-        let matches = if query.is_empty() {
-            true
-        } else {
-            metadata_ref
-                .get(&index)
-                .map(|data| data.name.to_lowercase().contains(&query.to_lowercase()))
-                .unwrap_or(false)
-        };
-        row.set_visible(matches);
-    }
-}
-
-pub fn filter_services(
-    service_widgets: &RefCell<Vec<ListBoxRow>>,
-    metadata: &RowMetadata,
     status_filter: &str,
     enablement_filter: &str,
 ) {
-    let widgets = service_widgets.borrow();
-    let metadata_ref = metadata.borrow();
+    for (service_data, row) in service_widgets {
+        let visible = service_data.matches_query(query)
+            && service_data.matches_filters(status_filter, enablement_filter);
+        row.set_visible(visible);
+    }
+}
 
-    for row in widgets.iter() {
-        let index = unsafe {
-            row.data::<usize>("row_index")
-                .expect("Row should have index")
-                .read()
-        };
+pub fn format_status(status: &crate::backend::ServiceStatus) -> &'static str {
+    use crate::backend::ServiceStatus;
+    match status {
+        ServiceStatus::Active => "Active",
+        ServiceStatus::Inactive => "Inactive",
+        ServiceStatus::Failed => "Failed",
+        ServiceStatus::Activating => "Activating",
+        ServiceStatus::Deactivating => "Deactivating",
+        ServiceStatus::Unknown(_) => "Unknown",
+    }
+}
 
-        let matches = metadata_ref
-            .get(&index)
-            .map(|data| {
-                let status_matches =
-                    status_filter == "All" || format_status(&data.status) == status_filter;
+pub fn format_enablement(enablement: &crate::backend::EnablementStatus) -> &'static str {
+    use crate::backend::EnablementStatus;
+    match enablement {
+        EnablementStatus::Enabled => "Enabled",
+        EnablementStatus::Disabled => "Disabled",
+        EnablementStatus::Static => "Static",
+        EnablementStatus::Indirect => "Indirect",
+        EnablementStatus::Generated => "Generated",
+        EnablementStatus::Transient => "Transient",
+        EnablementStatus::Unknown(_) => "Unknown",
+    }
+}
 
-                let enablement_matches = enablement_filter == "All"
-                    || format_enablement(&data.enablement) == enablement_filter;
+pub fn get_status_css_classes(status: &crate::backend::ServiceStatus) -> &'static [&'static str] {
+    use crate::backend::ServiceStatus;
+    match status {
+        ServiceStatus::Active => &["success"],
+        ServiceStatus::Failed => &["error"],
+        ServiceStatus::Activating | ServiceStatus::Deactivating => &["warning"],
+        _ => &["dim-label"],
+    }
+}
 
-                status_matches && enablement_matches
-            })
-            .unwrap_or(false);
-
-        row.set_visible(matches);
+pub fn get_enablement_css_classes(
+    enablement: &crate::backend::EnablementStatus,
+) -> &'static [&'static str] {
+    use crate::backend::EnablementStatus;
+    match enablement {
+        EnablementStatus::Enabled => &["success"],
+        EnablementStatus::Disabled => &["dim-label"],
+        EnablementStatus::Static => &["warning"],
+        _ => &["dim-label"],
     }
 }
