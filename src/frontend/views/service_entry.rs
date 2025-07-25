@@ -56,10 +56,16 @@ pub fn create_service_entry(service: &ServiceInfo) -> ListBoxRow {
     );
 
     row_box.append(&info_box);
-    ListBoxRow::builder().child(&row_box).build()
+    ListBoxRow::builder()
+        .child(&row_box)
+        .name(
+            format_enablement(&service.enablement_status).to_owned()
+                + format_status(&service.status),
+        ) // extremely clunky way to store data on a widget but i dont have to write in and unsafe thingy so..
+        .build()
 }
 
-fn format_status(status: &ServiceStatus) -> &'static str {
+pub fn format_status(status: &ServiceStatus) -> &'static str {
     match status {
         ServiceStatus::Active => "Active",
         ServiceStatus::Inactive => "Inactive",
@@ -70,7 +76,7 @@ fn format_status(status: &ServiceStatus) -> &'static str {
     }
 }
 
-fn format_enablement(enablement: &EnablementStatus) -> &'static str {
+pub fn format_enablement(enablement: &EnablementStatus) -> &'static str {
     match enablement {
         EnablementStatus::Enabled => "Enabled",
         EnablementStatus::Disabled => "Disabled",
@@ -96,6 +102,6 @@ fn get_enablement_css_classes(enablement: &EnablementStatus) -> &'static [&'stat
         EnablementStatus::Enabled => &["success"],
         EnablementStatus::Disabled => &["dim-label"],
         EnablementStatus::Static => &["warning"],
-        _ => &["caption"],
+        _ => &["dim-label"],
     }
 }
