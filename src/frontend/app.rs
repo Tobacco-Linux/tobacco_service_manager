@@ -1,23 +1,31 @@
 use super::views::{create_service_entry, filter_services};
-use crate::backend::get_services;
+use crate::{backend::get_services, frontend::views::create_filter_controls};
 use adw::{Application, HeaderBar, Window, prelude::*};
-use gtk4::{Box, ListBox, Orientation, ScrolledWindow, SearchEntry, SelectionMode, Separator};
+use gtk4::{Box, ListBox, Orientation, ScrolledWindow, SearchEntry, Separator};
 
 pub fn build_ui(app: &Application) {
     let search_entry = SearchEntry::builder()
         .css_classes(["inline"])
-        .placeholder_text("Search services...")
-        .hexpand(true)
+        .placeholder_text("Search names...")
+        .hexpand(false)
         .build();
 
-    let sidebar = ListBox::builder()
+    let sidebar = Box::builder()
         .css_classes(["navigation-sidebar"])
-        .selection_mode(SelectionMode::None)
+        .orientation(Orientation::Vertical)
+        .margin_start(12)
+        .margin_end(12)
+        .margin_top(4)
+        .margin_bottom(4)
+        .spacing(2)
         .build();
+
     sidebar.append(&search_entry);
+    sidebar.append(&Separator::new(Orientation::Vertical));
+    sidebar.append(&create_filter_controls());
 
     let services_list = ListBox::builder()
-        .selection_mode(SelectionMode::None)
+        .selection_mode(gtk4::SelectionMode::Multiple)
         .css_classes(["boxed-list"])
         .margin_top(12)
         .margin_bottom(12)
@@ -66,6 +74,7 @@ pub fn build_ui(app: &Application) {
 
     main_box.append(
         &ScrolledWindow::builder()
+            .hscrollbar_policy(gtk4::PolicyType::Never)
             .min_content_width(550)
             .child(&services_list)
             .hexpand(true)
@@ -79,8 +88,8 @@ pub fn build_ui(app: &Application) {
 
     Window::builder()
         .application(app)
-        .default_width(900)
-        .default_height(650)
+        .default_width(1200)
+        .default_height(800)
         .title("Service Manager")
         .content(&vbox)
         .build()
