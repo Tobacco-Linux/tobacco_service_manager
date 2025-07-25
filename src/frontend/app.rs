@@ -1,13 +1,15 @@
 use super::views::{
     ServiceData, create_filter_controls, create_service_entry, update_service_visibility,
 };
-use crate::backend::get_services;
+use crate::backend::SystemdServiceManager;
 use adw::{Application, HeaderBar, Window, prelude::*};
 use gtk4::{Box, Button, ListBox, ListBoxRow, Orientation, ScrolledWindow, SearchEntry, Separator};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub fn build_ui(app: &Application) {
+    let systemd = SystemdServiceManager::new();
+
     let search_entry = SearchEntry::builder()
         .css_classes(["inline"])
         .placeholder_text("Search names...")
@@ -52,7 +54,7 @@ pub fn build_ui(app: &Application) {
             for (_, row) in service_widgets.borrow_mut().drain(..) {
                 services_list.remove(&row);
             }
-            if let Ok(services) = get_services() {
+            if let Ok(services) = systemd.get_services() {
                 let widgets: Vec<(ServiceData, ListBoxRow)> = services
                     .into_iter()
                     .map(|service| create_service_entry(&service))
@@ -108,9 +110,8 @@ pub fn build_ui(app: &Application) {
         update_visibility_enablement();
     });
 
-    let refresh_button_handler = refresh_data.clone();
     refresh_button.connect_clicked(move |_| {
-        refresh_button_handler();
+        refresh_data();
         update_visibility();
     });
 

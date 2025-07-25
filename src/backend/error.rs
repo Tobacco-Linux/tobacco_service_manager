@@ -16,8 +16,6 @@ impl std::fmt::Display for ServiceError {
     }
 }
 
-impl std::error::Error for ServiceError {}
-
 impl From<ZbusError> for ServiceError {
     fn from(e: ZbusError) -> Self {
         Self::ZbusError(e)

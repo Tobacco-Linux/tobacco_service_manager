@@ -15,6 +15,7 @@ pub enum ServiceStatus {
     Deactivating,
     Unknown(String),
 }
+// models.rs
 
 impl From<&str> for ServiceStatus {
     fn from(s: &str) -> Self {
@@ -54,7 +55,7 @@ impl From<&str> for EnablementStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnitInfo {
     pub name: String,
     pub description: String,
