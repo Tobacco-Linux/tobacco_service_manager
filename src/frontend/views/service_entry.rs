@@ -1,7 +1,23 @@
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
 use crate::backend::{EnablementStatus, ServiceInfo, ServiceStatus};
+use adw::prelude::ObjectExt;
 use gtk4::{Align, Box, Label, ListBoxRow, Orientation, Separator, prelude::BoxExt};
 
-pub fn create_service_entry(service: &ServiceInfo) -> ListBoxRow {
+#[derive(Debug, Clone)]
+pub struct ServiceRowData {
+    pub name: String,
+    pub status: ServiceStatus,
+    pub enablement: EnablementStatus,
+}
+
+pub type RowMetadata = Rc<RefCell<HashMap<usize, ServiceRowData>>>;
+
+pub fn create_service_entry(
+    service: &ServiceInfo,
+    metadata: &RowMetadata,
+    index: usize,
+) -> ListBoxRow {
     let row_box = Box::builder()
         .orientation(Orientation::Vertical)
         .spacing(6)
@@ -36,33 +52,40 @@ pub fn create_service_entry(service: &ServiceInfo) -> ListBoxRow {
         .spacing(12)
         .build();
 
-    info_box.append(
-        &Label::builder()
-            .label(&format!("Status: {}", format_status(&service.status)))
-            .halign(Align::Start)
-            .css_classes(get_status_css_classes(&service.status))
-            .build(),
-    );
+    let status_label = Label::builder()
+        .label(&format!("Status: {}", format_status(&service.status)))
+        .halign(Align::Start)
+        .css_classes(get_status_css_classes(&service.status))
+        .build();
 
-    info_box.append(
-        &Label::builder()
-            .label(&format!(
-                "Enablement: {}",
-                format_enablement(&service.enablement_status)
-            ))
-            .halign(Align::Start)
-            .css_classes(get_enablement_css_classes(&service.enablement_status))
-            .build(),
-    );
+    let enablement_label = Label::builder()
+        .label(&format!(
+            "Enablement: {}",
+            format_enablement(&service.enablement_status)
+        ))
+        .halign(Align::Start)
+        .css_classes(get_enablement_css_classes(&service.enablement_status))
+        .build();
+
+    info_box.append(&status_label);
+    info_box.append(&enablement_label);
 
     row_box.append(&info_box);
-    ListBoxRow::builder()
-        .child(&row_box)
-        .name(
-            format_enablement(&service.enablement_status).to_owned()
-                + format_status(&service.status),
-        ) // extremely clunky way to store data on a widget but i dont have to write in and unsafe thingy so..
-        .build()
+
+    let row = ListBoxRow::builder().child(&row_box).build();
+
+    metadata.borrow_mut().insert(
+        index,
+        ServiceRowData {
+            name: service.name.clone(),
+            status: service.status.clone(),
+            enablement: service.enablement_status.clone(),
+        },
+    );
+
+    unsafe { row.set_data("row_index", index) };
+
+    row
 }
 
 pub fn format_status(status: &ServiceStatus) -> &'static str {

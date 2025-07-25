@@ -1,40 +1,65 @@
-use gtk4::{ListBox, ListBoxRow, prelude::WidgetExt};
+use adw::glib::object::ObjectExt;
+use gtk4::{ListBoxRow, prelude::WidgetExt};
 use std::cell::RefCell;
 
+use crate::frontend::views::service_entry::{RowMetadata, format_enablement, format_status};
+
 pub fn search_services(
-    service_widgets: &RefCell<Vec<(String, ListBoxRow)>>,
-    services_list: &ListBox,
+    service_widgets: &RefCell<Vec<ListBoxRow>>,
+    metadata: &RowMetadata,
     query: &str,
 ) {
     let widgets = service_widgets.borrow();
+    let metadata_ref = metadata.borrow();
 
-    while let Some(child) = services_list.first_child() {
-        services_list.remove(&child);
+    for row in widgets.iter() {
+        let index = unsafe {
+            row.data::<usize>("row_index")
+                .expect("Row should have index")
+                .read()
+        };
+
+        let matches = if query.is_empty() {
+            true
+        } else {
+            metadata_ref
+                .get(&index)
+                .map(|data| data.name.to_lowercase().contains(&query.to_lowercase()))
+                .unwrap_or(false)
+        };
+        row.set_visible(matches);
     }
-
-    widgets
-        .iter()
-        .filter(|(name, _)| query.is_empty() || name.to_lowercase().contains(&query.to_lowercase()))
-        .for_each(|(_, row)| services_list.append(row));
 }
 
 pub fn filter_services(
-    service_widgets: &RefCell<Vec<(String, ListBoxRow)>>,
-    services_list: &ListBox,
+    service_widgets: &RefCell<Vec<ListBoxRow>>,
+    metadata: &RowMetadata,
     status_filter: &str,
     enablement_filter: &str,
 ) {
     let widgets = service_widgets.borrow();
+    let metadata_ref = metadata.borrow();
 
-    while let Some(child) = services_list.first_child() {
-        services_list.remove(&child);
+    for row in widgets.iter() {
+        let index = unsafe {
+            row.data::<usize>("row_index")
+                .expect("Row should have index")
+                .read()
+        };
+
+        let matches = metadata_ref
+            .get(&index)
+            .map(|data| {
+                let status_matches =
+                    status_filter == "All" || format_status(&data.status) == status_filter;
+
+                let enablement_matches = enablement_filter == "All"
+                    || format_enablement(&data.enablement) == enablement_filter;
+
+                status_matches && enablement_matches
+            })
+            .unwrap_or(false);
+
+        row.set_visible(matches);
     }
-
-    widgets
-        .iter()
-        .filter(|(_, service)| {
-            (status_filter == "All" || service.widget_name().contains(status_filter))
-                && (enablement_filter == "All" || service.widget_name().contains(enablement_filter))
-        })
-        .for_each(|(_, row)| services_list.append(row));
 }

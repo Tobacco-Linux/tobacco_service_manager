@@ -15,10 +15,31 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
         .description("Filter services by status and enablement")
         .build();
 
-    let (status_row, status_combo) =
-        create_combo_row("Status:", &["All", "Active", "Inactive", "Failed"]);
-    let (enablement_row, enablement_combo) =
-        create_combo_row("Enablement:", &["All", "Enabled", "Disabled", "Static"]);
+    let (status_row, status_combo) = create_combo_row(
+        "Status:",
+        &[
+            "All",
+            "Active",
+            "Inactive",
+            "Failed",
+            "Activating",
+            "Deactivating",
+            "Unknown",
+        ],
+    );
+    let (enablement_row, enablement_combo) = create_combo_row(
+        "Enablement:",
+        &[
+            "All",
+            "Enabled",
+            "Disabled",
+            "Static",
+            "Indirect",
+            "Generated",
+            "Transient",
+            "Unknown",
+        ],
+    );
 
     group.add(&status_row);
     group.add(&enablement_row);
