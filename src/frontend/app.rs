@@ -3,7 +3,7 @@ use super::views::{
 };
 use crate::backend::get_services;
 use adw::{Application, HeaderBar, Window, prelude::*};
-use gtk4::{Box, ListBox, ListBoxRow, Orientation, ScrolledWindow, SearchEntry, Separator};
+use gtk4::{Box, Button, ListBox, ListBoxRow, Orientation, ScrolledWindow, SearchEntry, Separator};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -25,6 +25,8 @@ pub fn build_ui(app: &Application) {
 
     let (filter_controls, status_combo, enablement_combo) = create_filter_controls();
 
+    let refresh_button = Button::builder().icon_name("view-refresh").build();
+
     sidebar.append(&search_entry);
     sidebar.append(&Separator::new(Orientation::Vertical));
     sidebar.append(&filter_controls);
@@ -42,18 +44,30 @@ pub fn build_ui(app: &Application) {
     let service_widgets: Rc<RefCell<Vec<(ServiceData, ListBoxRow)>>> =
         Rc::new(RefCell::new(Vec::new()));
 
-    if let Ok(services) = get_services() {
-        let widgets: Vec<(ServiceData, ListBoxRow)> = services
-            .into_iter()
-            .map(|service| create_service_entry(&service))
-            .collect();
+    let refresh_data = {
+        let service_widgets = service_widgets.clone();
+        let services_list = services_list.clone();
 
-        for (_, row) in &widgets {
-            services_list.append(row);
+        move || {
+            for (_, row) in service_widgets.borrow_mut().drain(..) {
+                services_list.remove(&row);
+            }
+            if let Ok(services) = get_services() {
+                let widgets: Vec<(ServiceData, ListBoxRow)> = services
+                    .into_iter()
+                    .map(|service| create_service_entry(&service))
+                    .collect();
+
+                for (_, row) in &widgets {
+                    services_list.append(row);
+                }
+
+                *service_widgets.borrow_mut() = widgets;
+            }
         }
+    };
 
-        *service_widgets.borrow_mut() = widgets;
-    }
+    refresh_data(); // initial loading
 
     let update_visibility = {
         let service_widgets = service_widgets.clone();
@@ -92,6 +106,12 @@ pub fn build_ui(app: &Application) {
     let update_visibility_enablement = update_visibility.clone();
     enablement_combo.connect_changed(move |_| {
         update_visibility_enablement();
+    });
+
+    let refresh_button_handler = refresh_data.clone();
+    refresh_button.connect_clicked(move |_| {
+        refresh_button_handler();
+        update_visibility();
     });
 
     let main_box = Box::builder()
@@ -139,8 +159,11 @@ pub fn build_ui(app: &Application) {
     services_container.set_hexpand(true);
     services_container.set_vexpand(true);
 
+    let header = HeaderBar::new();
+    header.pack_start(&refresh_button);
+
     let vbox = Box::new(Orientation::Vertical, 0);
-    vbox.append(&HeaderBar::new());
+    vbox.append(&header);
     vbox.append(&main_box);
 
     Window::builder()
