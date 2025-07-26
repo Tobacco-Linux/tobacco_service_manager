@@ -1,7 +1,7 @@
 use adw::{ActionRow, PreferencesGroup, prelude::*};
 use gtk4::{Align, Box, Button, Orientation};
 
-pub fn create_service_actions<F: Fn(&Button) + 'static + Copy>(button_callback: F) -> Box {
+pub fn create_service_actions<F: Fn(&Button) + 'static + Clone>(button_callback: F) -> Box {
     let main_box = Box::builder()
         .orientation(Orientation::Vertical)
         .margin_top(12)
@@ -40,7 +40,7 @@ pub fn create_service_actions<F: Fn(&Button) + 'static + Copy>(button_callback: 
     main_box
 }
 
-fn create_action_buttons<F: Fn(&Button) + 'static + Copy>(
+fn create_action_buttons<F: Fn(&Button) + 'static + Clone>(
     title: &str,
     actions: &[(&str, &str, &str)],
     callback: &F,

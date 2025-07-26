@@ -1,9 +1,11 @@
 use super::{error::Result, models::UnitInfo};
 use rayon::prelude::*;
+use serde::ser;
 use std::collections::HashMap;
-use zbus::blocking::Connection;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::blocking::{Connection, Proxy};
+use zbus::zvariant::{DynamicType, OwnedObjectPath};
 
+#[derive(Clone)]
 pub struct SystemdServiceManager;
 
 impl SystemdServiceManager {
@@ -110,6 +112,55 @@ impl SystemdServiceManager {
         )?
         .body()
         .deserialize()
+        .map_err(Into::into)
+    }
+
+    pub fn start_unit(&self, unit_name: &str) -> Result<()> {
+        let conn = Connection::system()?;
+        self.call_manager_method(&conn, "StartUnit", &(unit_name, "replace"))?;
+        Ok(())
+    }
+
+    pub fn stop_unit(&self, unit_name: &str) -> Result<()> {
+        let conn = Connection::system()?;
+        self.call_manager_method(&conn, "StopUnit", &(unit_name, "replace"))?;
+        Ok(())
+    }
+
+    pub fn enable_unit(&self, unit_name: &str) -> Result<()> {
+        let conn = Connection::system()?;
+        let proxy = self.get_manager_proxy(&conn)?;
+        proxy.call_method("EnableUnitFiles", &(vec![unit_name], false, true))?;
+        Ok(())
+    }
+
+    pub fn disable_unit(&self, unit_name: &str) -> Result<()> {
+        let conn = Connection::system()?;
+        let proxy = self.get_manager_proxy(&conn)?;
+        proxy.call_method("DisableUnitFiles", &(vec![unit_name], false))?;
+        Ok(())
+    }
+
+    fn call_manager_method<T>(
+        &self,
+        conn: &Connection,
+        method: &str,
+        args: &T,
+    ) -> Result<zbus::Message>
+    where
+        T: ser::Serialize + DynamicType,
+    {
+        let proxy = self.get_manager_proxy(conn)?;
+        proxy.call_method(method, args).map_err(Into::into)
+    }
+
+    fn get_manager_proxy<'a>(&self, conn: &'a Connection) -> Result<Proxy<'a>> {
+        Proxy::new(
+            conn,
+            "org.freedesktop.systemd1",
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager",
+        )
         .map_err(Into::into)
     }
 }

@@ -91,7 +91,10 @@ pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) 
 
     row_box.append(&info_box);
 
-    let row = ListBoxRow::builder().child(&row_box).build();
+    let row = ListBoxRow::builder()
+        .name(&service_data.name)
+        .child(&row_box)
+        .build();
 
     (service_data, row)
 }
