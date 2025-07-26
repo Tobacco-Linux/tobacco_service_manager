@@ -1,9 +1,96 @@
-use super::{error::Result, models::UnitInfo};
 use rayon::prelude::*;
 use serde::ser;
 use std::collections::HashMap;
+use zbus::Error as ZbusError;
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{DynamicType, OwnedObjectPath};
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum ServiceError {
+    ZbusError(ZbusError),
+    ParseError(String),
+}
+
+impl std::fmt::Display for ServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ZbusError(e) => write!(f, "D-Bus error: {}", e),
+            Self::ParseError(e) => write!(f, "Parse error: {}", e),
+        }
+    }
+}
+
+impl From<ZbusError> for ServiceError {
+    fn from(e: ZbusError) -> Self {
+        Self::ZbusError(e)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, ServiceError>;
+
+#[derive(Debug, Clone)]
+pub struct ServiceInfo {
+    pub name: String,
+    pub description: String,
+    pub status: ServiceStatus,
+    pub enablement_status: EnablementStatus,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ServiceStatus {
+    Active,
+    Inactive,
+    Failed,
+    Activating,
+    Deactivating,
+    Unknown(String),
+}
+
+impl From<&str> for ServiceStatus {
+    fn from(s: &str) -> Self {
+        match s {
+            "active" => Self::Active,
+            "inactive" => Self::Inactive,
+            "failed" => Self::Failed,
+            "activating" => Self::Activating,
+            "deactivating" => Self::Deactivating,
+            _ => Self::Unknown(s.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnablementStatus {
+    Enabled,
+    Disabled,
+    Static,
+    Indirect,
+    Generated,
+    Transient,
+    Unknown(String),
+}
+
+impl From<&str> for EnablementStatus {
+    fn from(s: &str) -> Self {
+        match s {
+            "enabled" => Self::Enabled,
+            "disabled" => Self::Disabled,
+            "static" => Self::Static,
+            "indirect" => Self::Indirect,
+            "generated" => Self::Generated,
+            "transient" => Self::Transient,
+            _ => Self::Unknown(s.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UnitInfo {
+    pub name: String,
+    pub description: String,
+    pub active_state: String,
+}
 
 #[derive(Clone)]
 pub struct SystemdServiceManager;
@@ -13,7 +100,7 @@ impl SystemdServiceManager {
         Self
     }
 
-    pub fn get_services(&self) -> Result<Vec<super::models::ServiceInfo>> {
+    pub fn get_services(&self) -> Result<Vec<ServiceInfo>> {
         let (system_result, session_result) = rayon::join(
             || self.fetch_services(Connection::system()),
             || self.fetch_services(Connection::session()),
@@ -29,10 +116,7 @@ impl SystemdServiceManager {
         Ok(services)
     }
 
-    fn fetch_services(
-        &self,
-        conn_result: zbus::Result<Connection>,
-    ) -> Result<Vec<super::models::ServiceInfo>> {
+    fn fetch_services(&self, conn_result: zbus::Result<Connection>) -> Result<Vec<ServiceInfo>> {
         let conn = conn_result?;
         let (units, unit_files) = rayon::join(
             || self.call_list_units(&conn),
@@ -60,7 +144,7 @@ impl SystemdServiceManager {
                     .unwrap_or("unknown")
                     .into();
 
-                super::models::ServiceInfo {
+                ServiceInfo {
                     name: unit.name,
                     description: unit.description,
                     status: unit.active_state.as_str().into(),
