@@ -9,21 +9,18 @@ use zbus::zvariant::{OwnedObjectPath, Value};
 const ACTION_ID: &str = "org.freedesktop.systemd1.manage-units";
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum ServiceError {
     ZbusError(ZbusError),
-    ParseError(String),
+    AuthorizationFailed(String),
 }
-
 impl std::fmt::Display for ServiceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ZbusError(e) => write!(f, "D-Bus error: {}", e),
-            Self::ParseError(e) => write!(f, "Parse error: {}", e),
+            Self::AuthorizationFailed(e) => write!(f, "Authorization failed: {}", e),
         }
     }
 }
-
 impl From<ZbusError> for ServiceError {
     fn from(e: ZbusError) -> Self {
         Self::ZbusError(e)
@@ -40,7 +37,7 @@ pub struct ServiceInfo {
     pub enablement_status: EnablementStatus,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ServiceStatus {
     Active,
     Inactive,
@@ -49,7 +46,6 @@ pub enum ServiceStatus {
     Deactivating,
     Unknown(String),
 }
-
 impl From<&str> for ServiceStatus {
     fn from(s: &str) -> Self {
         match s {
@@ -63,7 +59,7 @@ impl From<&str> for ServiceStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EnablementStatus {
     Enabled,
     Disabled,
@@ -73,7 +69,6 @@ pub enum EnablementStatus {
     Transient,
     Unknown(String),
 }
-
 impl From<&str> for EnablementStatus {
     fn from(s: &str) -> Self {
         match s {
@@ -134,21 +129,18 @@ impl SystemdServiceManager {
                     .map(|name| (name.to_string(), state))
             })
             .collect();
+
         Ok(units
             .into_par_iter()
             .filter(|u| u.name.ends_with(".service"))
-            .map(|unit| {
-                let enablement_status = enablement_map
+            .map(|unit| ServiceInfo {
+                name: unit.name.to_owned(),
+                description: unit.description,
+                status: unit.active_state.as_str().into(),
+                enablement_status: enablement_map
                     .get(&unit.name)
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown")
-                    .into();
-                ServiceInfo {
-                    name: unit.name,
-                    description: unit.description,
-                    status: unit.active_state.as_str().into(),
-                    enablement_status,
-                }
+                    .map(|s| s.as_str().into())
+                    .unwrap_or(EnablementStatus::Unknown("unknown".to_string())),
             })
             .collect())
     }
@@ -161,7 +153,7 @@ impl SystemdServiceManager {
             "ListUnits",
             &(),
         )?;
-        Ok(msg
+        let units: Vec<_> = msg
             .body()
             .deserialize::<Vec<(
                 String,
@@ -175,13 +167,14 @@ impl SystemdServiceManager {
                 String,
                 OwnedObjectPath,
             )>>()?
-            .into_par_iter()
+            .into_iter()
             .map(|(name, description, _, active_state, ..)| UnitInfo {
                 name,
                 description,
                 active_state,
             })
-            .collect())
+            .collect();
+        Ok(units)
     }
 
     fn call_list_unit_files(&self, conn: &Connection) -> Result<Vec<(String, String)>> {
@@ -197,61 +190,40 @@ impl SystemdServiceManager {
         .map_err(Into::into)
     }
 
-    pub fn start_unit(&self, unit_name: &str) -> Result<()> {
+    fn get_authorized_connection(&self, action_id: &str) -> Result<Connection> {
         let conn = Connection::system()?;
-
-        if !self.authorize(ACTION_ID, &conn)? {
-            return Err(ServiceError::ParseError(format!(
-                "Not authorized to start unit '{}'",
-                unit_name
+        if !self.authorize(action_id, &conn)? {
+            return Err(ServiceError::AuthorizationFailed(format!(
+                "Not authorized to perform action '{}'",
+                action_id
             )));
         }
+        Ok(conn)
+    }
 
+    pub fn start_unit(&self, unit_name: &str) -> Result<()> {
+        let conn = self.get_authorized_connection(ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("StartUnit", &(unit_name, "replace"))?;
         Ok(())
     }
 
     pub fn stop_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = Connection::system()?;
-
-        if !self.authorize(ACTION_ID, &conn)? {
-            return Err(ServiceError::ParseError(format!(
-                "Not authorized to stop unit '{}'",
-                unit_name
-            )));
-        }
-
+        let conn = self.get_authorized_connection(ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("StopUnit", &(unit_name, "replace"))?;
         Ok(())
     }
 
     pub fn enable_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = Connection::system()?;
-
-        if !self.authorize(ACTION_ID, &conn)? {
-            return Err(ServiceError::ParseError(format!(
-                "Not authorized to stop unit '{}'",
-                unit_name
-            )));
-        }
-
+        let conn = self.get_authorized_connection(ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("EnableUnitFiles", &(vec![unit_name], false, true))?;
         Ok(())
     }
 
     pub fn disable_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = Connection::system()?;
-
-        if !self.authorize(ACTION_ID, &conn)? {
-            return Err(ServiceError::ParseError(format!(
-                "Not authorized to stop unit '{}'",
-                unit_name
-            )));
-        }
-
+        let conn = self.get_authorized_connection(ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("DisableUnitFiles", &(vec![unit_name], false))?;
         Ok(())
@@ -268,12 +240,14 @@ impl SystemdServiceManager {
     }
 
     fn authorize<'a>(&self, action_id: &str, conn: &'a Connection) -> Result<bool> {
-        let mut subject = HashMap::new();
-        subject.insert("pid", Value::from(std::process::id()));
-        subject.insert("start-time", Value::from(0u64));
-        subject.insert("uid", Value::from(get_current_uid()));
-        let subject = ("unix-process", subject);
-
+        let subject = (
+            "unix-process",
+            HashMap::from([
+                ("pid", Value::from(std::process::id() as u32)),
+                ("start-time", Value::from(0u64)),
+                ("uid", Value::from(get_current_uid())),
+            ]),
+        );
         let reply = conn.call_method(
             Some("org.freedesktop.PolicyKit1"),
             "/org/freedesktop/PolicyKit1/Authority",
@@ -281,7 +255,6 @@ impl SystemdServiceManager {
             "CheckAuthorization",
             &(subject, action_id, HashMap::<&str, &str>::new(), 1u32, ""),
         );
-
         match reply {
             Ok(msg) => {
                 let (is_authenticated, _, _): (bool, bool, HashMap<String, String>) =
