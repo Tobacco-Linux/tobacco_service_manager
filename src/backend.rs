@@ -1,10 +1,12 @@
 // backend.rs
 use rayon::prelude::*;
-use serde::Serialize;
 use std::collections::HashMap;
+use users::get_current_uid;
 use zbus::Error as ZbusError;
 use zbus::blocking::{Connection, Proxy};
-use zbus::zvariant::{DynamicType, OwnedObjectPath};
+use zbus::zvariant::{OwnedObjectPath, Value};
+
+const ACTION_ID: &str = "org.freedesktop.systemd1.manage-units";
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -197,18 +199,44 @@ impl SystemdServiceManager {
 
     pub fn start_unit(&self, unit_name: &str) -> Result<()> {
         let conn = Connection::system()?;
-        self.call_manager_method(&conn, "StartUnit", &(unit_name, "replace"))?;
+
+        if !self.authorize(ACTION_ID, &conn)? {
+            return Err(ServiceError::ParseError(format!(
+                "Not authorized to start unit '{}'",
+                unit_name
+            )));
+        }
+
+        let proxy = self.get_manager_proxy(&conn)?;
+        proxy.call_method("StartUnit", &(unit_name, "replace"))?;
         Ok(())
     }
 
     pub fn stop_unit(&self, unit_name: &str) -> Result<()> {
         let conn = Connection::system()?;
-        self.call_manager_method(&conn, "StopUnit", &(unit_name, "replace"))?;
+
+        if !self.authorize(ACTION_ID, &conn)? {
+            return Err(ServiceError::ParseError(format!(
+                "Not authorized to stop unit '{}'",
+                unit_name
+            )));
+        }
+
+        let proxy = self.get_manager_proxy(&conn)?;
+        proxy.call_method("StopUnit", &(unit_name, "replace"))?;
         Ok(())
     }
 
     pub fn enable_unit(&self, unit_name: &str) -> Result<()> {
         let conn = Connection::system()?;
+
+        if !self.authorize(ACTION_ID, &conn)? {
+            return Err(ServiceError::ParseError(format!(
+                "Not authorized to stop unit '{}'",
+                unit_name
+            )));
+        }
+
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("EnableUnitFiles", &(vec![unit_name], false, true))?;
         Ok(())
@@ -216,22 +244,17 @@ impl SystemdServiceManager {
 
     pub fn disable_unit(&self, unit_name: &str) -> Result<()> {
         let conn = Connection::system()?;
+
+        if !self.authorize(ACTION_ID, &conn)? {
+            return Err(ServiceError::ParseError(format!(
+                "Not authorized to stop unit '{}'",
+                unit_name
+            )));
+        }
+
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("DisableUnitFiles", &(vec![unit_name], false))?;
         Ok(())
-    }
-
-    fn call_manager_method<T>(
-        &self,
-        conn: &Connection,
-        method: &str,
-        args: &T,
-    ) -> Result<zbus::Message>
-    where
-        T: Serialize + DynamicType,
-    {
-        let proxy = self.get_manager_proxy(conn)?;
-        proxy.call_method(method, args).map_err(Into::into)
     }
 
     fn get_manager_proxy<'a>(&self, conn: &'a Connection) -> Result<Proxy<'a>> {
@@ -242,5 +265,33 @@ impl SystemdServiceManager {
             "org.freedesktop.systemd1.Manager",
         )
         .map_err(Into::into)
+    }
+
+    fn authorize<'a>(&self, action_id: &str, conn: &'a Connection) -> Result<bool> {
+        let mut subject = HashMap::new();
+        subject.insert("pid", Value::from(std::process::id()));
+        subject.insert("start-time", Value::from(0u64));
+        subject.insert("uid", Value::from(get_current_uid()));
+        let subject = ("unix-process", subject);
+
+        let reply = conn.call_method(
+            Some("org.freedesktop.PolicyKit1"),
+            "/org/freedesktop/PolicyKit1/Authority",
+            Some("org.freedesktop.PolicyKit1.Authority"),
+            "CheckAuthorization",
+            &(subject, action_id, HashMap::<&str, &str>::new(), 1u32, ""),
+        );
+
+        match reply {
+            Ok(msg) => {
+                let (is_authenticated, _, _): (bool, bool, HashMap<String, String>) =
+                    msg.body().deserialize()?;
+                Ok(is_authenticated)
+            }
+            Err(e) => {
+                eprintln!("Polkit check failed: {}", e);
+                Ok(false)
+            }
+        }
     }
 }
