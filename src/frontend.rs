@@ -6,39 +6,55 @@ use gtk4::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
-struct ServiceManagerState {
-    systemd: SystemdServiceManager,
-    service_widgets: Rc<RefCell<Vec<(ServiceData, ListBoxRow)>>>,
-    services_list: ListBox,
-    status_combo: ComboBoxText,
-    enablement_combo: ComboBoxText,
-    current_query: Rc<RefCell<String>>,
-    toast_overlay: ToastOverlay,
+#[derive(Debug, Clone)]
+pub struct ServiceData {
+    pub name: String,
+    pub status: ServiceStatus,
+    pub enablement: EnablementStatus,
+}
+
+impl ServiceData {
+    pub fn matches_query(&self, query: &str) -> bool {
+        query.is_empty() || self.name.to_lowercase().contains(&query.to_lowercase())
+    }
+
+    pub fn matches_filters(&self, status_filter: &str, enablement_filter: &str) -> bool {
+        let status_matches = status_filter == "All" || format_status(&self.status) == status_filter;
+        let enablement_matches =
+            enablement_filter == "All" || format_enablement(&self.enablement) == enablement_filter;
+        status_matches && enablement_matches
+    }
+}
+
+pub struct ServiceManagerState {
+    pub systemd: SystemdServiceManager,
+    pub service_widgets: Rc<RefCell<Vec<(ServiceData, ListBoxRow)>>>,
+    pub services_list: ListBox,
+    pub status_combo: ComboBoxText,
+    pub enablement_combo: ComboBoxText,
+    pub current_query: Rc<RefCell<String>>,
+    pub toast_overlay: ToastOverlay,
 }
 
 impl ServiceManagerState {
-    fn refresh_services(&self) {
+    pub fn refresh_services(&self) {
         for (_, row) in self.service_widgets.borrow_mut().drain(..) {
             self.services_list.remove(&row);
         }
-
         if let Ok(services) = self.systemd.get_services() {
             let widgets: Vec<(ServiceData, ListBoxRow)> = services
                 .into_iter()
                 .map(|service| create_service_entry(&service))
                 .collect();
-
             for (_, row) in &widgets {
                 self.services_list.append(row);
             }
-
             *self.service_widgets.borrow_mut() = widgets;
         }
-
         self.update_visibility();
     }
 
-    fn update_visibility(&self) {
+    pub fn update_visibility(&self) {
         let query = self.current_query.borrow().clone();
         let status_filter = self
             .status_combo
@@ -48,7 +64,6 @@ impl ServiceManagerState {
             .enablement_combo
             .active_text()
             .unwrap_or_else(|| "All".into());
-
         update_service_visibility(
             &self.service_widgets.borrow(),
             &query,
@@ -57,13 +72,12 @@ impl ServiceManagerState {
         );
     }
 
-    fn handle_service_action(&self, action: &str) {
+    pub fn handle_service_action(&self, action: &str) {
         let selected_services = get_selected_services(&self.services_list);
         if selected_services.is_empty() {
             self.show_toast("No services selected", ToastPriority::Normal);
             return;
         }
-
         for service_name in &selected_services {
             let result = match action {
                 "Start" => self.systemd.start_unit(service_name),
@@ -72,7 +86,6 @@ impl ServiceManagerState {
                 "Disable" => self.systemd.disable_unit(service_name),
                 _ => continue,
             };
-
             match result {
                 Ok(()) => self.show_toast(
                     &format!("{} operation successful for {}", action, service_name),
@@ -84,11 +97,10 @@ impl ServiceManagerState {
                 ),
             }
         }
-
         self.refresh_services();
     }
 
-    fn show_toast(&self, message: &str, priority: ToastPriority) {
+    pub fn show_toast(&self, message: &str, priority: ToastPriority) {
         let toast = Toast::builder()
             .title(message)
             .priority(priority)
@@ -109,7 +121,6 @@ pub fn build_ui(app: &Application) {
         .margin_end(12)
         .build();
     let toast_overlay = ToastOverlay::new();
-
     let state = Rc::new(RefCell::new(ServiceManagerState {
         systemd,
         service_widgets: Rc::new(RefCell::new(Vec::new())),
@@ -119,12 +130,9 @@ pub fn build_ui(app: &Application) {
         current_query: Rc::new(RefCell::new(String::new())),
         toast_overlay,
     }));
-
     let sidebar = build_sidebar(Rc::clone(&state));
     let main_content = build_main_content(Rc::clone(&state));
-
     let window = create_window(app, Rc::clone(&state), sidebar, main_content);
-
     state.borrow().refresh_services();
     window.present();
 }
@@ -139,23 +147,18 @@ fn build_sidebar(state: Rc<RefCell<ServiceManagerState>>) -> Box {
         .margin_bottom(4)
         .spacing(2)
         .build();
-
     let search_entry = SearchEntry::builder()
         .css_classes(["inline"])
         .placeholder_text("Search names...")
         .build();
-
     let (filter_controls, status_combo, enablement_combo) = create_filter_controls();
-
     {
         let mut state = state.borrow_mut();
         state.status_combo = status_combo;
         state.enablement_combo = enablement_combo;
     }
-
     let refresh_button = Button::builder().icon_name("view-refresh").build();
     setup_refresh_button(refresh_button, Rc::clone(&state));
-
     let action_callback = {
         let state = Rc::clone(&state);
         move |button: &Button| {
@@ -164,12 +167,10 @@ fn build_sidebar(state: Rc<RefCell<ServiceManagerState>>) -> Box {
             }
         }
     };
-
     sidebar.append(&search_entry);
     sidebar.append(&Separator::new(gtk4::Orientation::Horizontal));
     sidebar.append(&filter_controls);
     sidebar.append(&create_service_actions(action_callback));
-
     let state_search = Rc::clone(&state);
     search_entry.connect_search_changed(move |search| {
         let query = search.text().to_string();
@@ -180,17 +181,14 @@ fn build_sidebar(state: Rc<RefCell<ServiceManagerState>>) -> Box {
             .clone_from(&query);
         state_search.borrow().update_visibility();
     });
-
     let state_status = Rc::clone(&state);
     state.borrow().status_combo.connect_changed(move |_| {
         state_status.borrow().update_visibility();
     });
-
     let state_enablement = Rc::clone(&state);
     state.borrow().enablement_combo.connect_changed(move |_| {
         state_enablement.borrow().update_visibility();
     });
-
     sidebar
 }
 
@@ -200,7 +198,6 @@ fn build_main_content(state: Rc<RefCell<ServiceManagerState>>) -> Box {
         .hexpand(true)
         .vexpand(true)
         .build();
-
     let services_scroll = ScrolledWindow::builder()
         .hscrollbar_policy(gtk4::PolicyType::Never)
         .min_content_width(550)
@@ -208,7 +205,6 @@ fn build_main_content(state: Rc<RefCell<ServiceManagerState>>) -> Box {
         .hexpand(true)
         .vexpand(true)
         .build();
-
     services_container.append(&services_scroll);
     services_container
 }
@@ -223,35 +219,27 @@ fn create_window(
         .orientation(gtk4::Orientation::Vertical)
         .width_request(350)
         .build();
-
     let sidebar_scroll = ScrolledWindow::builder()
         .min_content_width(250)
         .child(&sidebar)
         .vexpand(true)
         .hexpand(false)
         .build();
-
     sidebar_container.append(&sidebar_scroll);
-
     let main_box = Box::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .hexpand(true)
         .vexpand(true)
         .build();
-
     main_box.append(&sidebar_container);
     main_box.append(&Separator::new(gtk4::Orientation::Vertical));
     main_box.append(&main_content);
-
     state.borrow().toast_overlay.set_child(Some(&main_box));
-
     let header = HeaderBar::new();
     header.pack_start(&Button::builder().icon_name("view-refresh").build());
-
     let vbox = Box::new(gtk4::Orientation::Vertical, 0);
     vbox.append(&header);
     vbox.append(&state.borrow().toast_overlay);
-
     Window::builder()
         .application(app)
         .default_width(1200)
@@ -282,33 +270,12 @@ fn get_selected_services(list_box: &ListBox) -> Vec<String> {
         .collect()
 }
 
-#[derive(Debug, Clone)]
-pub struct ServiceData {
-    pub name: String,
-    pub status: ServiceStatus,
-    pub enablement: EnablementStatus,
-}
-
-impl ServiceData {
-    pub fn matches_query(&self, query: &str) -> bool {
-        query.is_empty() || self.name.to_lowercase().contains(&query.to_lowercase())
-    }
-
-    pub fn matches_filters(&self, status_filter: &str, enablement_filter: &str) -> bool {
-        let status_matches = status_filter == "All" || format_status(&self.status) == status_filter;
-        let enablement_matches =
-            enablement_filter == "All" || format_enablement(&self.enablement) == enablement_filter;
-        status_matches && enablement_matches
-    }
-}
-
 pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) {
     let service_data = ServiceData {
         name: service.name.clone(),
         status: service.status.clone(),
         enablement: service.enablement_status.clone(),
     };
-
     let row_box = Box::builder()
         .orientation(gtk4::Orientation::Vertical)
         .spacing(6)
@@ -317,7 +284,6 @@ pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) 
         .margin_top(9)
         .margin_bottom(9)
         .build();
-
     row_box.append(
         &Label::builder()
             .label(&service.name)
@@ -325,7 +291,6 @@ pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) 
             .css_classes(["heading"])
             .build(),
     );
-
     row_box.append(
         &Label::builder()
             .label(&service.description)
@@ -335,14 +300,11 @@ pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) 
             .css_classes(["caption"])
             .build(),
     );
-
     row_box.append(&Separator::new(gtk4::Orientation::Horizontal));
-
     let info_box = Box::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .spacing(12)
         .build();
-
     info_box.append(
         &Label::builder()
             .label(&format!("Status: {}", format_status(&service.status)))
@@ -350,7 +312,6 @@ pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) 
             .css_classes(get_status_css_classes(&service.status))
             .build(),
     );
-
     info_box.append(
         &Label::builder()
             .label(&format!(
@@ -361,14 +322,11 @@ pub fn create_service_entry(service: &ServiceInfo) -> (ServiceData, ListBoxRow) 
             .css_classes(get_enablement_css_classes(&service.enablement_status))
             .build(),
     );
-
     row_box.append(&info_box);
-
     let row = ListBoxRow::builder()
         .name(&service_data.name)
         .child(&row_box)
         .build();
-
     (service_data, row)
 }
 
@@ -380,12 +338,10 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
         .margin_start(12)
         .margin_end(12)
         .build();
-
     let group = adw::PreferencesGroup::builder()
         .title("Service Filters")
         .description("Filter services by status and enablement state")
         .build();
-
     let (status_row, status_combo) = create_combo_row(
         "Status",
         &[
@@ -398,7 +354,6 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
             "Unknown",
         ],
     );
-
     let (enablement_row, enablement_combo) = create_combo_row(
         "Enablement",
         &[
@@ -412,11 +367,9 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
             "Unknown",
         ],
     );
-
     group.add(&status_row);
     group.add(&enablement_row);
     main_box.append(&group);
-
     (main_box, status_combo, enablement_combo)
 }
 
@@ -429,13 +382,11 @@ fn create_combo_row(title: &str, options: &[&str]) -> (adw::ActionRow, gtk4::Com
         combo.append_text(option);
     });
     combo.set_active(Some(0));
-
     let row = adw::ActionRow::builder()
         .title(title)
         .activatable(false)
         .build();
     row.add_suffix(&combo);
-
     (row, combo)
 }
 
@@ -447,12 +398,10 @@ pub fn create_service_actions<F: Fn(&Button) + 'static + Clone>(button_callback:
         .margin_start(12)
         .margin_end(12)
         .build();
-
     let group = adw::PreferencesGroup::builder()
         .title("Service Actions")
         .description("Perform actions on selected services")
         .build();
-
     let state_row = create_action_buttons(
         "State",
         &[
@@ -461,7 +410,6 @@ pub fn create_service_actions<F: Fn(&Button) + 'static + Clone>(button_callback:
         ],
         &button_callback,
     );
-
     let enablement_row = create_action_buttons(
         "Enablement",
         &[
@@ -470,11 +418,9 @@ pub fn create_service_actions<F: Fn(&Button) + 'static + Clone>(button_callback:
         ],
         &button_callback,
     );
-
     group.add(&state_row);
     group.add(&enablement_row);
     main_box.append(&group);
-
     main_box
 }
 
@@ -490,19 +436,16 @@ fn create_action_buttons<F: Fn(&Button) + 'static + Clone>(
         .margin_top(6)
         .margin_bottom(6)
         .build();
-
     for (label, tooltip, icon) in actions {
         let button = Button::builder()
             .icon_name(*icon)
             .tooltip_text(*tooltip)
             .label(*label)
             .build();
-
         let callback_clone = callback.clone();
         button.connect_clicked(move |btn| callback_clone(btn));
         button_box.append(&button);
     }
-
     let row = adw::ActionRow::builder()
         .title(title)
         .activatable(false)
@@ -524,8 +467,7 @@ pub fn update_service_visibility(
     }
 }
 
-pub fn format_status(status: &crate::backend::ServiceStatus) -> &'static str {
-    use crate::backend::ServiceStatus;
+pub fn format_status(status: &ServiceStatus) -> &'static str {
     match status {
         ServiceStatus::Active => "Active",
         ServiceStatus::Inactive => "Inactive",
@@ -536,8 +478,7 @@ pub fn format_status(status: &crate::backend::ServiceStatus) -> &'static str {
     }
 }
 
-pub fn format_enablement(enablement: &crate::backend::EnablementStatus) -> &'static str {
-    use crate::backend::EnablementStatus;
+pub fn format_enablement(enablement: &EnablementStatus) -> &'static str {
     match enablement {
         EnablementStatus::Enabled => "Enabled",
         EnablementStatus::Disabled => "Disabled",
@@ -549,8 +490,7 @@ pub fn format_enablement(enablement: &crate::backend::EnablementStatus) -> &'sta
     }
 }
 
-pub fn get_status_css_classes(status: &crate::backend::ServiceStatus) -> &'static [&'static str] {
-    use crate::backend::ServiceStatus;
+pub fn get_status_css_classes(status: &ServiceStatus) -> &'static [&'static str] {
     match status {
         ServiceStatus::Active => &["success"],
         ServiceStatus::Failed => &["error"],
@@ -559,10 +499,7 @@ pub fn get_status_css_classes(status: &crate::backend::ServiceStatus) -> &'stati
     }
 }
 
-pub fn get_enablement_css_classes(
-    enablement: &crate::backend::EnablementStatus,
-) -> &'static [&'static str] {
-    use crate::backend::EnablementStatus;
+pub fn get_enablement_css_classes(enablement: &EnablementStatus) -> &'static [&'static str] {
     match enablement {
         EnablementStatus::Enabled => &["success"],
         EnablementStatus::Disabled => &["dim-label"],

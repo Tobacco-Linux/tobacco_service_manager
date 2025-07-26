@@ -1,5 +1,6 @@
+// backend.rs
 use rayon::prelude::*;
-use serde::ser;
+use serde::Serialize;
 use std::collections::HashMap;
 use zbus::Error as ZbusError;
 use zbus::blocking::{Connection, Proxy};
@@ -86,7 +87,7 @@ impl From<&str> for EnablementStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct UnitInfo {
+struct UnitInfo {
     pub name: String,
     pub description: String,
     pub active_state: String,
@@ -105,7 +106,6 @@ impl SystemdServiceManager {
             || self.fetch_services(Connection::system()),
             || self.fetch_services(Connection::session()),
         );
-
         let mut services = Vec::new();
         if let Ok(s) = system_result {
             services.extend(s);
@@ -122,7 +122,6 @@ impl SystemdServiceManager {
             || self.call_list_units(&conn),
             || self.call_list_unit_files(&conn),
         );
-
         let units = units?;
         let enablement_map: HashMap<_, _> = unit_files?
             .into_par_iter()
@@ -133,7 +132,6 @@ impl SystemdServiceManager {
                     .map(|name| (name.to_string(), state))
             })
             .collect();
-
         Ok(units
             .into_par_iter()
             .filter(|u| u.name.ends_with(".service"))
@@ -143,7 +141,6 @@ impl SystemdServiceManager {
                     .map(|s| s.as_str())
                     .unwrap_or("unknown")
                     .into();
-
                 ServiceInfo {
                     name: unit.name,
                     description: unit.description,
@@ -162,7 +159,6 @@ impl SystemdServiceManager {
             "ListUnits",
             &(),
         )?;
-
         Ok(msg
             .body()
             .deserialize::<Vec<(
@@ -232,7 +228,7 @@ impl SystemdServiceManager {
         args: &T,
     ) -> Result<zbus::Message>
     where
-        T: ser::Serialize + DynamicType,
+        T: Serialize + DynamicType,
     {
         let proxy = self.get_manager_proxy(conn)?;
         proxy.call_method(method, args).map_err(Into::into)

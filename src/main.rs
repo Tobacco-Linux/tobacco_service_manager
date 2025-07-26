@@ -1,19 +1,19 @@
+use crate::frontend::build_ui;
 use adw::{
     Application,
-    gio::prelude::{ApplicationExt, ApplicationExtManual},
-    glib,
+    prelude::{ApplicationExt, ApplicationExtManual},
 };
 mod backend;
 mod frontend;
 
-fn main() -> glib::ExitCode {
+fn main() {
     let app = Application::builder()
-        .application_id("org.tobacco_linux.ServiceManager")
+        .application_id("com.TobaccoLinux.ServiceManager")
         .build();
 
     app.connect_activate(|app| {
-        frontend::build_ui(app);
+        build_ui(app);
     });
 
-    app.run()
+    app.run();
 }
