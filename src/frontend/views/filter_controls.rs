@@ -1,5 +1,5 @@
-use adw::{ActionRow, prelude::*};
-use gtk4::{Box, ComboBoxText, Orientation};
+use adw::{ActionRow, PreferencesGroup, prelude::*};
+use gtk4::{Align, Box, ComboBoxText, Orientation};
 
 pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
     let main_box = Box::builder()
@@ -10,13 +10,13 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
         .margin_end(12)
         .build();
 
-    let group = adw::PreferencesGroup::builder()
-        .title("Filters")
-        .description("Filter services by status and enablement")
+    let group = PreferencesGroup::builder()
+        .title("Service Filters")
+        .description("Filter services by status and enablement state")
         .build();
 
     let (status_row, status_combo) = create_combo_row(
-        "Status:",
+        "Status",
         &[
             "All",
             "Active",
@@ -27,8 +27,9 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
             "Unknown",
         ],
     );
+
     let (enablement_row, enablement_combo) = create_combo_row(
-        "Enablement:",
+        "Enablement",
         &[
             "All",
             "Enabled",
@@ -43,25 +44,25 @@ pub fn create_filter_controls() -> (Box, ComboBoxText, ComboBoxText) {
 
     group.add(&status_row);
     group.add(&enablement_row);
-
     main_box.append(&group);
+
     (main_box, status_combo, enablement_combo)
 }
 
 fn create_combo_row(title: &str, options: &[&str]) -> (ActionRow, ComboBoxText) {
-    let combo = ComboBoxText::new();
-    for option in options {
+    let combo = ComboBoxText::builder()
+        .valign(Align::Center)
+        .css_classes(["compact"])
+        .build();
+    options.iter().for_each(|option| {
         combo.append_text(option);
-    }
-    combo.set_active(Some(0));
-    combo.set_valign(gtk4::Align::Center);
-    combo.add_css_class("flat");
-    combo.set_size_request(150, -1);
+    });
 
-    let row = ActionRow::builder().title(title).build();
+    combo.set_active(Some(0));
+
+    let row = ActionRow::builder().title(title).activatable(false).build();
 
     row.add_suffix(&combo);
-    row.set_activatable_widget(Some(&combo));
 
     (row, combo)
 }

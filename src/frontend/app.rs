@@ -2,6 +2,7 @@ use super::views::{
     ServiceData, create_filter_controls, create_service_entry, update_service_visibility,
 };
 use crate::backend::SystemdServiceManager;
+use crate::frontend::views::create_service_actions;
 use adw::{Application, HeaderBar, Window, prelude::*};
 use gtk4::{Box, Button, ListBox, ListBoxRow, Orientation, ScrolledWindow, SearchEntry, Separator};
 use std::cell::RefCell;
@@ -26,12 +27,16 @@ pub fn build_ui(app: &Application) {
         .build();
 
     let (filter_controls, status_combo, enablement_combo) = create_filter_controls();
+    let actions = create_service_actions(|button| {
+        dbg!(button.label());
+    });
 
     let refresh_button = Button::builder().icon_name("view-refresh").build();
 
     sidebar.append(&search_entry);
     sidebar.append(&Separator::new(Orientation::Vertical));
     sidebar.append(&filter_controls);
+    sidebar.append(&actions);
 
     let services_list = ListBox::builder()
         .selection_mode(gtk4::SelectionMode::Multiple)
