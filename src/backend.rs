@@ -5,7 +5,8 @@ use zbus::Error as ZbusError;
 use zbus::blocking::{Connection, Proxy};
 use zbus::zvariant::{OwnedObjectPath, Value};
 
-const ACTION_ID: &str = "org.freedesktop.systemd1.manage-units";
+const UNIT_ACTION_ID: &str = "org.freedesktop.systemd1.manage-units";
+const UNIT_FILE_ACTION_ID: &str = "org.freedesktop.systemd1.manage-unit-files";
 
 #[derive(Debug)]
 pub enum ServiceError {
@@ -201,28 +202,28 @@ impl SystemdServiceManager {
     }
 
     pub fn start_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = self.get_authorized_connection(ACTION_ID)?;
+        let conn = self.get_authorized_connection(UNIT_ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("StartUnit", &(unit_name, "replace"))?;
         Ok(())
     }
 
     pub fn stop_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = self.get_authorized_connection(ACTION_ID)?;
+        let conn = self.get_authorized_connection(UNIT_ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("StopUnit", &(unit_name, "replace"))?;
         Ok(())
     }
 
     pub fn enable_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = self.get_authorized_connection(ACTION_ID)?;
+        let conn = self.get_authorized_connection(UNIT_FILE_ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("EnableUnitFiles", &(vec![unit_name], false, true))?;
         Ok(())
     }
 
     pub fn disable_unit(&self, unit_name: &str) -> Result<()> {
-        let conn = self.get_authorized_connection(ACTION_ID)?;
+        let conn = self.get_authorized_connection(UNIT_FILE_ACTION_ID)?;
         let proxy = self.get_manager_proxy(&conn)?;
         proxy.call_method("DisableUnitFiles", &(vec![unit_name], false))?;
         Ok(())
