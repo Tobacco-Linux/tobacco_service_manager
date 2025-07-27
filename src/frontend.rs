@@ -178,7 +178,7 @@ impl ServiceManagerState {
 pub fn build_ui(app: &Application) {
     let systemd = SystemdServiceManager::new();
     let services_list = ListBox::builder()
-        .selection_mode(gtk4::SelectionMode::Multiple)
+        .selection_mode(gtk4::SelectionMode::Single)
         .css_classes(["boxed-list"])
         .margin_top(12)
         .margin_bottom(12)
