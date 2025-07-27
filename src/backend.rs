@@ -1,4 +1,3 @@
-// backend.rs
 use rayon::prelude::*;
 use std::collections::HashMap;
 use users::get_current_uid;

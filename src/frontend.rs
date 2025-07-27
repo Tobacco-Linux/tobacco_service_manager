@@ -1,4 +1,3 @@
-// frontend.rs
 use crate::backend::{EnablementStatus, ServiceInfo, ServiceStatus, SystemdServiceManager};
 use adw::{Application, HeaderBar, Toast, ToastOverlay, ToastPriority, Window, prelude::*};
 use gtk4::{
