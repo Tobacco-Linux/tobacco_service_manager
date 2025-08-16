@@ -7,6 +7,5 @@ edition = "2024"
 adw = { version = "0.8.0", package = "libadwaita", features = ["v1_5"] }
 gtk4 = "0.10.0"
 rayon = "1.10.0"
-serde = "1.0.219"
 users = "0.11.0"
 zbus = "5.9.0"
